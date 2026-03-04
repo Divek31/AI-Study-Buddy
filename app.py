@@ -1207,9 +1207,12 @@ def view_your_searches():
             st.markdown(item['youtube_links'])
             st.markdown('</div>', unsafe_allow_html=True)
 
-def main():
-    apply_custom_css()
-    initialize_gemini("AIzaSyDvz0oEIgyvksHjhhEcaB2MEWsY0fmCQUg")
+    import os
+    # SECURE: Fetch API key from environment variables, DO NOT hardcode here!
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        st.warning("GEMINI_API_KEY environment variable is not set. AI features will not work until this is configured.")
+    initialize_gemini(api_key)
     
     # State initializations
     if 'user' not in st.session_state:

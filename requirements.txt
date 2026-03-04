@@ -11,3 +11,4 @@ bcrypt
 youtube-transcript-api
 gTTS
 fpdf2
+python-dotenv

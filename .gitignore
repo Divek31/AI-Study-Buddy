@@ -15,8 +15,15 @@ study_buddy.db
 uploads/
 error.log
 
+# Environment Variables
+.env
+.streamlit/secrets.toml
+
 # IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Databases
+*.db

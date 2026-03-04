@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project specifics
+study_buddy.db
+uploads/
+error.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo

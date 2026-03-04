@@ -1,0 +1,13 @@
+streamlit
+langchain
+langchain-huggingface
+langchain-community
+chromadb
+google-generativeai
+PyPDF2
+sentence-transformers
+pydantic
+bcrypt
+youtube-transcript-api
+gTTS
+fpdf2

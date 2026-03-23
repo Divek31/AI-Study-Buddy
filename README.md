@@ -43,3 +43,5 @@ An interactive, AI-powered learning workspace designed to help you organize note
    ```bash
    python -m streamlit run app.py
    ```
+## 🔗 Live Demo
+👉 https://ai-buddy-study.streamlit.app

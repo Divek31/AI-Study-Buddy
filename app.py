@@ -590,7 +590,7 @@ def view_subject_workspace():
 
     if vector_store is not None or global_search:
         # --- Custom Tab System ---
-        col1, col2, col3, col4, col5, col6 = st.columns([1, 1.4, 1.1, 1.1, 1.3, 1.1])
+        col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1.4, 1.1, 1.1, 1.3, 1.1, 1.1])
         
         def set_tab(tab_name):
             st.session_state.active_tab = tab_name
@@ -613,6 +613,9 @@ def view_subject_workspace():
         with col6:
              if st.button("🎬 Visuals", on_click=set_tab, args=("Visuals",), use_container_width=True, type="secondary" if st.session_state.active_tab != "Visuals" else "primary"):
                  pass
+        with col7:
+             if st.button("⏱️ Focus", on_click=set_tab, args=("Focus",), use_container_width=True, type="secondary" if st.session_state.active_tab != "Focus" else "primary"):
+                 pass
                  
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -632,6 +635,69 @@ def view_subject_workspace():
                         st.write(answer)
                 else:
                     st.warning("Please enter a question.")
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        elif st.session_state.active_tab == "Focus":
+            st.markdown('<div class="glass-container">', unsafe_allow_html=True)
+            st.markdown("<h3>Pomodoro Focus Timer</h3>", unsafe_allow_html=True)
+            
+            if "pomodoro_start_time" not in st.session_state:
+                st.session_state.pomodoro_start_time = None
+
+            if st.session_state.pomodoro_start_time is None:
+                st.markdown("Start a 25-minute Pomodoro session. Stay focused!")
+                if st.button("▶️ Start 25m Focus Session", type="primary", use_container_width=True):
+                    st.session_state.pomodoro_start_time = time.time()
+                    st.rerun()
+            else:
+                elapsed = int(time.time() - st.session_state.pomodoro_start_time)
+                remaining = max(0, (25 * 60) - elapsed)
+                
+                # HTML JS component for smooth ticking
+                timer_html = f"""
+                <div id="countdown" style="text-align: center; font-size: 5rem; color: #EC4186; font-family: 'Lexend', sans-serif; font-weight: bold;"></div>
+                <script>
+                var remaining = {remaining};
+                var el = document.getElementById('countdown');
+                var interval = setInterval(function() {{
+                    var m = Math.floor(remaining / 60);
+                    var s = remaining % 60;
+                    el.innerHTML = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                    if (remaining <= 0) {{
+                        clearInterval(interval);
+                        el.innerHTML = "00:00";
+                    }} else {{
+                        remaining--;
+                    }}
+                }}, 1000);
+                </script>
+                """
+                components.html(timer_html, height=120)
+                
+                if remaining > 0:
+                    st.markdown("<p style='text-align: center;'>Stay focused on your notes!</p>", unsafe_allow_html=True)
+                    if st.button("🛑 Cancel Session", type="secondary", use_container_width=True):
+                        st.session_state.pomodoro_start_time = None
+                        st.rerun()
+                else:
+                    st.success("Session Complete! Great job staying focused.")
+                    st.balloons()
+                    if st.button("Log Session & Claim 25 XP", type="primary", use_container_width=True):
+                        log_study_session(st.session_state.user['id'], "pomodoro", 25)
+                        state = add_xp(st.session_state.user['id'], 25)
+                        st.session_state.user['xp'] = state['xp']
+                        st.session_state.user['level'] = state['level']
+                        st.toast("+25 XP! 🌟")
+                        if state['leveled_up']:
+                            st.toast(f"Level Up! You are now level {{state['level']}}! 🎉", icon="⭐")
+                        
+                        if award_badge(st.session_state.user['id'], "Focus Master"):
+                            st.toast("Unlocked 'Focus Master' Badge! 🏆")
+                            if "Focus Master" not in st.session_state.user['badges']:
+                                st.session_state.user['badges'].append("Focus Master")
+                                
+                        st.session_state.pomodoro_start_time = None
+                        st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
             
         elif st.session_state.active_tab == "Visuals":

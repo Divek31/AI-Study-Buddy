@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 from database import init_db, create_user, verify_user, update_study_streak, add_subject, get_subjects, get_materials, add_quiz, get_quizzes, add_flashcard, get_flashcards, add_xp, award_badge, log_study_session, get_study_analytics, add_search_history, get_search_history
 from database import init_db, create_user, verify_user, update_study_streak, add_subject, get_subjects, get_materials, add_quiz, get_quizzes, add_flashcard, get_flashcards, add_xp, award_badge, log_study_session, get_study_analytics, add_search_history, get_search_history, add_study_plan, get_study_plans, add_srs_flashcards, get_due_srs_flashcards, update_srs_flashcard
 from document_processor import process_pdf, create_vector_store
-from ai_assistant import initialize_gemini, answer_question, feynman_explain, generate_quiz, summarize_notes, generate_flashcards, get_youtube_recommendations, analyze_knowledge_gaps, generate_study_plan
+from ai_assistant import initialize_gemini, answer_question, feynman_explain, generate_quiz, summarize_notes, generate_flashcards, get_youtube_recommendations, analyze_knowledge_gaps, generate_study_plan, generate_mock_exam, grade_mock_exam
 from exporter import create_pdf, create_audio
 
 st.set_page_config(page_title="AI Study Buddy", page_icon="🎓", layout="wide")
@@ -590,7 +590,7 @@ def view_subject_workspace():
 
     if vector_store is not None or global_search:
         # --- Custom Tab System ---
-        col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1.4, 1.1, 1.1, 1.3, 1.1, 1.1])
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1, 1.4, 1.1, 1.1, 1.3, 1.1, 1.1, 1.3])
         
         def set_tab(tab_name):
             st.session_state.active_tab = tab_name
@@ -615,6 +615,9 @@ def view_subject_workspace():
                  pass
         with col7:
              if st.button("⏱️ Focus", on_click=set_tab, args=("Focus",), use_container_width=True, type="secondary" if st.session_state.active_tab != "Focus" else "primary"):
+                 pass
+        with col8:
+             if st.button("🎓 Exam Mode", on_click=set_tab, args=("Exam Mode",), use_container_width=True, type="secondary" if st.session_state.active_tab != "Exam Mode" else "primary"):
                  pass
                  
         st.markdown("<br>", unsafe_allow_html=True)
@@ -991,6 +994,69 @@ def view_subject_workspace():
                 else:
                     st.success("🎉 You're all caught up for now! Great job.")
                         
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        elif st.session_state.active_tab == "Exam Mode":
+            st.markdown('<div class="glass-container">', unsafe_allow_html=True)
+            st.markdown("<h3>Mock Exam Simulator</h3>", unsafe_allow_html=True)
+            
+            num_questions = st.slider("Number of Essay Questions", 1, 5, 3, key="exam_q_count")
+            topic = "notes" if not global_search else st.text_input("Topic for exam", value="General Science", key="exam_topic")
+            
+            if "exam_data" not in st.session_state:
+                st.session_state.exam_data = None
+            if "exam_result" not in st.session_state:
+                st.session_state.exam_result = None
+
+            if st.button("Generate Exam", type="primary"):
+                with st.spinner("Preparing your mock exam..."):
+                    st.session_state.exam_data = generate_mock_exam(vector_store, global_search, topic, num_questions)
+                    st.session_state.exam_result = None
+                    st.rerun()
+                    
+            if st.session_state.exam_data and not st.session_state.exam_result:
+                st.markdown("---")
+                with st.form("exam_form"):
+                    user_answers = {}
+                    for i, q in enumerate(st.session_state.exam_data):
+                        st.markdown(f"**Q{i+1}: {q['question']}**")
+                        user_answers[str(i)] = st.text_area(f"Your Answer", key=f"exam_ans_{i}", height=120)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        
+                    if st.form_submit_button("Submit Exam"):
+                        with st.spinner("Grading exam..."):
+                            result = grade_mock_exam(st.session_state.exam_data, user_answers)
+                            st.session_state.exam_result = result
+                            
+                            # Gamification
+                            if result and "total_score_out_of_100" in result:
+                                xp_gain = result["total_score_out_of_100"]
+                                state = add_xp(st.session_state.user['id'], xp_gain)
+                                st.session_state.user['xp'] = state['xp']
+                                st.session_state.user['level'] = state['level']
+                                st.toast(f"+{xp_gain} XP! 🎓")
+                                log_study_session(st.session_state.user['id'], "mock_exam", 30)
+                                if award_badge(st.session_state.user['id'], "Exam Crusher"):
+                                    st.toast("Unlocked 'Exam Crusher' Badge! 🏆")
+                                    if "Exam Crusher" not in st.session_state.user['badges']:
+                                         st.session_state.user['badges'].append("Exam Crusher")
+                            st.rerun()
+                            
+            if st.session_state.exam_result:
+                st.markdown("---")
+                st.markdown("### 🎓 Exam Grading Report")
+                res = st.session_state.exam_result
+                st.markdown(f"**Final Score:** {res.get('total_score_out_of_100', 0)} / 100")
+                st.markdown(f"**Summary Feedback:** {res.get('summary_feedback', '')}")
+                
+                for f in res.get('question_feedback', []):
+                    st.info(f"**Q: {f.get('question')}**\n\n**Score:** {f.get('score_out_of_10')}/10\n\n**Feedback:** {f.get('feedback')}")
+                    
+                if st.button("Start New Exam"):
+                    st.session_state.exam_data = None
+                    st.session_state.exam_result = None
+                    st.rerun()
+                    
             st.markdown('</div>', unsafe_allow_html=True)
 
 def view_materials():

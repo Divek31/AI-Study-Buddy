@@ -250,6 +250,87 @@ Include short, actionable goals for each study block (e.g., "Review flashcards",
 
 Format the output cleanly with Headers for each Day, and bullet points for the tasks. Make it encouraging and practical."""
 
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = _get_genai().GenerativeModel('gemini-2.5-flash')
     response = model.generate_content(prompt)
     return response.text
+
+def generate_mock_exam(vector_store, global_search=False, topic="general knowledge", num_questions=3):
+    """Generates a mock exam consisting of short essay questions."""
+    json_schema = '''
+    [
+      {
+        "question": "The essay question text...",
+        "ideal_answer": "A robust, comprehensive ideal answer to grade against."
+      }
+    ]
+    '''
+    
+    if not global_search and vector_store:
+        context = get_rag_context(vector_store, "main ideas concepts summary", k=6)
+        prompt = f"""Based on the following context, generate a strict mock exam with {num_questions} thought-provoking short-answer essay questions.
+Provide the question and the ideal comprehensive answer for grading purposes later.
+Return the output STRICTLY as a valid JSON array matching this schema:
+{json_schema}
+
+Context:
+{context}
+
+Exam JSON:"""
+    else:
+        prompt = f"""Generate a strict mock exam with {num_questions} thought-provoking short-answer essay questions on the topic of '{topic}'.
+Provide the question and the ideal comprehensive answer for grading purposes later.
+Return the output STRICTLY as a valid JSON array matching this schema:
+{json_schema}
+
+Exam JSON:"""
+
+    model = _get_genai().GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+    response = model.generate_content(prompt)
+    try:
+        return json.loads(response.text)
+    except json.JSONDecodeError:
+        return []
+
+def grade_mock_exam(exam_data, user_answers_dict):
+    """Grades the mock exam user answers against the ideal answers."""
+    submission_data = []
+    for i, q in enumerate(exam_data):
+        submission_data.append({
+            "question": q['question'],
+            "ideal_answer": q['ideal_answer'],
+            "student_answer": user_answers_dict.get(str(i), user_answers_dict.get(i, ""))
+        })
+        
+    json_schema = '''
+    {
+      "total_score_out_of_100": 85,
+      "summary_feedback": "Overall good job, but review X.",
+      "question_feedback": [
+        {
+          "question": "...",
+          "score_out_of_10": 8,
+          "feedback": "You missed this specific point..."
+        }
+      ]
+    }
+    '''
+    
+    prompt = f"""You are a strict, expert professor grading a student's mock exam.
+Evaluate their answers against the ideal answers provided.
+Grade each question out of 10. Calculate a total score out of 100 (scale it appropriately based on the sum).
+Provide actionable feedback for each question.
+
+Submission Data:
+{json.dumps(submission_data, indent=2)}
+
+Return the output STRICTLY as a valid JSON object matching this schema:
+{json_schema}
+
+Grading JSON:"""
+
+    model = _get_genai().GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+    response = model.generate_content(prompt)
+    try:
+        return json.loads(response.text)
+    except json.JSONDecodeError:
+        return None

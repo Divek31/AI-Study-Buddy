@@ -89,6 +89,24 @@ def init_db():
         )
     ''')
     
+    # SRS Flashcards table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS srs_flashcards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            subject_id INTEGER,
+            front TEXT NOT NULL,
+            back TEXT NOT NULL,
+            ease_factor REAL DEFAULT 2.5,
+            interval INTEGER DEFAULT 0,
+            repetitions INTEGER DEFAULT 0,
+            next_review_date TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (subject_id) REFERENCES subjects (id)
+        )
+    ''')
+    
     # Study Logs table
     c.execute('''
         CREATE TABLE IF NOT EXISTS study_logs (
@@ -359,6 +377,76 @@ def get_flashcards(user_id):
             "subject_name": row[5] if row[5] else "Global"
         })
     return flashcards
+
+# --- SRS Flashcard Functions ---
+def add_srs_flashcards(user_id, subject_id, flashcards_list):
+    """Inserts a batch of generated flashcards into the SRS system."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    now_str = datetime.now().isoformat()
+    # next review is immediately
+    for fc in flashcards_list:
+        c.execute('''INSERT INTO srs_flashcards 
+                     (user_id, subject_id, front, back, ease_factor, interval, repetitions, next_review_date, created_at) 
+                     VALUES (?, ?, ?, ?, 2.5, 0, 0, ?, ?)''',
+                  (user_id, subject_id, fc['front'], fc['back'], now_str, now_str))
+    conn.commit()
+    conn.close()
+
+def get_due_srs_flashcards(user_id, subject_id=None):
+    """Gets flashcards that are due for review."""
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    now_str = datetime.now().isoformat()
+    
+    if subject_id:
+        c.execute("SELECT * FROM srs_flashcards WHERE user_id = ? AND subject_id = ? AND next_review_date <= ?", (user_id, subject_id, now_str))
+    else:
+        c.execute("SELECT * FROM srs_flashcards WHERE user_id = ? AND subject_id IS NULL AND next_review_date <= ?", (user_id, now_str))
+        
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+    
+def update_srs_flashcard(card_id, quality):
+    """Updates SRS parameters using a simple SM-2 like approach based on quality (1=Again, 2=Hard, 3=Good, 4=Easy)."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT ease_factor, interval, repetitions FROM srs_flashcards WHERE id = ?", (card_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return
+        
+    ease_factor, interval, repetitions = row
+    
+    if quality == 1: # Again
+        repetitions = 0
+        interval = 0
+        ease_factor -= 0.2
+    else:
+        if repetitions == 0:
+            interval = 1
+        elif repetitions == 1:
+            interval = 3
+        else:
+            interval = int(interval * ease_factor)
+            
+        repetitions += 1
+        
+        if quality == 2: ease_factor -= 0.15
+        if quality == 4: ease_factor += 0.15
+        # quality 3 retains the same ease factor
+
+    ease_factor = max(1.3, ease_factor)
+    next_review = datetime.now() + timedelta(days=interval)
+    
+    c.execute('''UPDATE srs_flashcards 
+                 SET ease_factor = ?, interval = ?, repetitions = ?, next_review_date = ?
+                 WHERE id = ?''', (ease_factor, interval, repetitions, next_review.isoformat(), card_id))
+    conn.commit()
+    conn.close()
 
 # --- Gamification Functions ---
 def add_xp(user_id, xp_gain):

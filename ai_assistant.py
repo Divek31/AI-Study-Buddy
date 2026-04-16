@@ -127,25 +127,43 @@ Summary:"""
     return response.text
 
 def generate_flashcards(vector_store, topic="key concepts and definitions", global_search=False):
-    """Generates a set of flashcards from the notes or general knowledge."""
+    """Generates a structured JSON set of flashcards from the notes or general knowledge."""
+    json_schema = '''
+    [
+      {
+        "front": "The concept or question?",
+        "back": "The definition or answer."
+      }
+    ]
+    '''
+    
     if not global_search and vector_store:
         context = get_rag_context(vector_store, topic, k=6)
-        prompt = f"""Based on the following context, generate 5-10 useful flashcards for studying.
-Format each flashcard clearly with a 'Front: [Question/Concept]' and 'Back: [Answer/Definition]'.
+        prompt = f"""Based on the following context, generate 5-10 highly effective flashcards for studying.
+Return the output STRICTLY as a valid JSON array matching this schema:
+{json_schema}
+Do NOT wrap the JSON in markdown code blocks. Just output the raw JSON array.
 
 Context:
 {context}
 
-Flashcards:"""
+Flashcards JSON:"""
     else:
-        prompt = f"""Generate 5-10 useful flashcards for studying the topic of '{topic}'.
-Format each flashcard clearly with a 'Front: [Question/Concept]' and 'Back: [Answer/Definition]'.
+        prompt = f"""Generate 5-10 highly effective flashcards for studying the topic of '{topic}'.
+Return the output STRICTLY as a valid JSON array matching this schema:
+{json_schema}
+Do NOT wrap the JSON in markdown code blocks. Just output the raw JSON array.
 
-Flashcards:"""
+Flashcards JSON:"""
 
-    model = _get_genai().GenerativeModel('gemini-2.5-flash')
+    model = _get_genai().GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
     response = model.generate_content(prompt)
-    return response.text
+    
+    try:
+        return json.loads(response.text)
+    except json.JSONDecodeError:
+        print("Failed to parse JSON flashcards out of response.")
+        return []
 
 def get_youtube_recommendations(vector_store, global_search=False, topic=None):
     """Generates optimal YouTube search queries and links based on the context or a specific topic."""

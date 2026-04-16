@@ -2,7 +2,7 @@ import streamlit as st
 import time
 import streamlit.components.v1 as components
 from database import init_db, create_user, verify_user, update_study_streak, add_subject, get_subjects, get_materials, add_quiz, get_quizzes, add_flashcard, get_flashcards, add_xp, award_badge, log_study_session, get_study_analytics, add_search_history, get_search_history
-from database import init_db, create_user, verify_user, update_study_streak, add_subject, get_subjects, get_materials, add_quiz, get_quizzes, add_flashcard, get_flashcards, add_xp, award_badge, log_study_session, get_study_analytics, add_search_history, get_search_history, add_study_plan, get_study_plans
+from database import init_db, create_user, verify_user, update_study_streak, add_subject, get_subjects, get_materials, add_quiz, get_quizzes, add_flashcard, get_flashcards, add_xp, award_badge, log_study_session, get_study_analytics, add_search_history, get_search_history, add_study_plan, get_study_plans, add_srs_flashcards, get_due_srs_flashcards, update_srs_flashcard
 from document_processor import process_pdf, create_vector_store
 from ai_assistant import initialize_gemini, answer_question, feynman_explain, generate_quiz, summarize_notes, generate_flashcards, get_youtube_recommendations, analyze_knowledge_gaps, generate_study_plan
 from exporter import create_pdf, create_audio
@@ -924,23 +924,73 @@ def view_subject_workspace():
 
         elif st.session_state.active_tab == "Flashcards":
             st.markdown('<div class="glass-container">', unsafe_allow_html=True)
-            st.markdown("<h3>Flashcards</h3>", unsafe_allow_html=True)
+            st.markdown("<h3>Spaced Repetition Flashcards</h3>", unsafe_allow_html=True)
             
-            if global_search:
-                st.markdown("Generate study flashcards for any topic.")
-                topic = st.text_input("Topic for flashcards:", value="Python Programming", key="flashcards_input")
-            else:
-                st.markdown("Generate study flashcards from your notes.")
-                topic = st.text_input("Specific topic for flashcards? (Optional)", value="key concepts and definitions", key="flashcards_input")
-                
-            if st.button("Generate Flashcards", type="primary"):
-                with st.spinner("Creating flashcards..."):
-                    flashcards = generate_flashcards(vector_store, topic, global_search)
-
-                    # Save to DB
-                    sub_id = st.session_state.active_subject['id'] if not global_search else None
-                    add_flashcard(st.session_state.user['id'], sub_id, topic, flashcards)
-                    st.markdown(flashcards)
+            sub_id = st.session_state.active_subject['id'] if not global_search else None
+            due_cards = get_due_srs_flashcards(st.session_state.user['id'], sub_id)
+            
+            col_gen, col_review = st.columns([1, 1])
+            with col_gen:
+                if global_search:
+                    st.markdown("Generate study flashcards for any topic.")
+                    topic = st.text_input("Topic for flashcards:", value="Python Programming", key="flashcards_input")
+                else:
+                    st.markdown("Generate study flashcards from your notes.")
+                    topic = st.text_input("Specific topic for flashcards? (Optional)", value="key concepts and definitions", key="flashcards_input")
+                    
+                if st.button("Generate & Add Flashcards", type="primary"):
+                    with st.spinner("Creating flashcards..."):
+                        flashcards_parsed = generate_flashcards(vector_store, topic, global_search)
+                        if flashcards_parsed:
+                            add_srs_flashcards(st.session_state.user['id'], sub_id, flashcards_parsed)
+                            st.success(f"Added {len(flashcards_parsed)} new flashcards to your deck!")
+                            st.rerun()
+                        else:
+                            st.error("Could not generate flashcards.")
+                            
+            with col_review:
+                st.markdown(f"**Cards due for review:** {len(due_cards)}")
+                if len(due_cards) > 0:
+                    current_card = due_cards[0]
+                    
+                    st.markdown("---")
+                    st.markdown(f"<h3 style='text-align: center; margin-bottom: 20px;'>{current_card['front']}</h3>", unsafe_allow_html=True)
+                    
+                    if "reveal_card" not in st.session_state:
+                        st.session_state.reveal_card = False
+                        
+                    if not st.session_state.reveal_card:
+                        if st.button("👁️ Reveal Answer", use_container_width=True):
+                            st.session_state.reveal_card = True
+                            st.rerun()
+                    else:
+                        st.markdown(f"<div style='background-color: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center;'>{current_card['back']}</div>", unsafe_allow_html=True)
+                        st.markdown("<br><p style='text-align: center;'>How well did you know this?</p>", unsafe_allow_html=True)
+                        
+                        fb_col1, fb_col2, fb_col3, fb_col4 = st.columns(4)
+                        with fb_col1:
+                            if st.button("Again", type="secondary", use_container_width=True):
+                                update_srs_flashcard(current_card['id'], quality=1)
+                                st.session_state.reveal_card = False
+                                st.rerun()
+                        with fb_col2:
+                            if st.button("Hard", type="secondary", use_container_width=True):
+                                update_srs_flashcard(current_card['id'], quality=2)
+                                st.session_state.reveal_card = False
+                                st.rerun()
+                        with fb_col3:
+                            if st.button("Good", type="secondary", use_container_width=True):
+                                update_srs_flashcard(current_card['id'], quality=3)
+                                st.session_state.reveal_card = False
+                                st.rerun()
+                        with fb_col4:
+                            if st.button("Easy", type="primary", use_container_width=True):
+                                update_srs_flashcard(current_card['id'], quality=4)
+                                st.session_state.reveal_card = False
+                                st.rerun()
+                else:
+                    st.success("🎉 You're all caught up for now! Great job.")
+                        
             st.markdown('</div>', unsafe_allow_html=True)
 
 def view_materials():

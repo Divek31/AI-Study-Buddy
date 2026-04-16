@@ -334,3 +334,49 @@ Grading JSON:"""
         return json.loads(response.text)
     except json.JSONDecodeError:
         return None
+
+def generate_boss_battle(vector_store, global_search=False, topic="general knowledge", num_questions=5):
+    """Generates an RPG boss battle based on study context."""
+    json_schema = '''
+    {
+      "boss_name": "The Mitochondria Behemoth",
+      "boss_description": "A massive beast that generates endless energy.",
+      "boss_emoji": "🐉",
+      "questions": [
+        {
+          "question": "What is the primary function of the mitochondria?",
+          "options": ["Energy production", "Cell division", "Protein synthesis", "Waste disposal"],
+          "correct_answer": "Energy production",
+          "attack_message": "The behemoth blasts you with a wave of ATP!"
+        }
+      ]
+    }
+    '''
+    
+    if not global_search and vector_store:
+        context = get_rag_context(vector_store, "main ideas concepts summary", k=6)
+        prompt = f"""You are a Dungeon Master for an educational RPG.
+Based on the following context, create a Boss Battle encounter with {num_questions} multiple-choice questions.
+Give the boss a creative name, description, and emoji based on the subject matter.
+Return the output STRICTLY as a valid JSON object matching this schema:
+{json_schema}
+
+Context:
+{context}
+
+Battle JSON:"""
+    else:
+        prompt = f"""You are a Dungeon Master for an educational RPG.
+Create a Boss Battle encounter with {num_questions} multiple-choice questions on the topic of '{topic}'.
+Give the boss a creative name, description, and emoji based on the subject matter.
+Return the output STRICTLY as a valid JSON object matching this schema:
+{json_schema}
+
+Battle JSON:"""
+
+    model = _get_genai().GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+    response = model.generate_content(prompt)
+    try:
+        return json.loads(response.text)
+    except json.JSONDecodeError:
+        return None

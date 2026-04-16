@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 from database import init_db, create_user, verify_user, update_study_streak, add_subject, get_subjects, get_materials, add_quiz, get_quizzes, add_flashcard, get_flashcards, add_xp, award_badge, log_study_session, get_study_analytics, add_search_history, get_search_history
 from database import init_db, create_user, verify_user, update_study_streak, add_subject, get_subjects, get_materials, add_quiz, get_quizzes, add_flashcard, get_flashcards, add_xp, award_badge, log_study_session, get_study_analytics, add_search_history, get_search_history, add_study_plan, get_study_plans, add_srs_flashcards, get_due_srs_flashcards, update_srs_flashcard
 from document_processor import process_pdf, create_vector_store
-from ai_assistant import initialize_gemini, answer_question, feynman_explain, generate_quiz, summarize_notes, generate_flashcards, get_youtube_recommendations, analyze_knowledge_gaps, generate_study_plan, generate_mock_exam, grade_mock_exam
+from ai_assistant import initialize_gemini, answer_question, feynman_explain, generate_quiz, summarize_notes, generate_flashcards, get_youtube_recommendations, analyze_knowledge_gaps, generate_study_plan, generate_mock_exam, grade_mock_exam, generate_boss_battle
 from exporter import create_pdf, create_audio
 
 st.set_page_config(page_title="AI Study Buddy", page_icon="🎓", layout="wide")
@@ -590,7 +590,7 @@ def view_subject_workspace():
 
     if vector_store is not None or global_search:
         # --- Custom Tab System ---
-        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1, 1.4, 1.1, 1.1, 1.3, 1.1, 1.1, 1.3])
+        col1, col2, col3, col4, col5, col6, col7, col8, col9 = st.columns([1, 1.4, 1.1, 1.1, 1.3, 1.1, 1.1, 1.3, 1.4])
         
         def set_tab(tab_name):
             st.session_state.active_tab = tab_name
@@ -618,6 +618,9 @@ def view_subject_workspace():
                  pass
         with col8:
              if st.button("🎓 Exam Mode", on_click=set_tab, args=("Exam Mode",), use_container_width=True, type="secondary" if st.session_state.active_tab != "Exam Mode" else "primary"):
+                 pass
+        with col9:
+             if st.button("🐉 Boss Battle", on_click=set_tab, args=("Boss Battle",), use_container_width=True, type="secondary" if st.session_state.active_tab != "Boss Battle" else "primary"):
                  pass
                  
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1057,6 +1060,118 @@ def view_subject_workspace():
                     st.session_state.exam_result = None
                     st.rerun()
                     
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        elif st.session_state.active_tab == "Boss Battle":
+            st.markdown('<div class="glass-container">', unsafe_allow_html=True)
+            st.markdown("<h3>🐉 RPG Boss Battle</h3>", unsafe_allow_html=True)
+            
+            if "boss_battle_data" not in st.session_state:
+                st.session_state.boss_battle_data = None
+                st.session_state.player_hp = 100
+                st.session_state.boss_hp = 100
+                st.session_state.current_q_index = 0
+                st.session_state.combat_log = []
+                st.session_state.battle_active = False
+
+            topic = "notes" if not global_search else st.text_input("Topic to fight", value="General Science")
+            
+            if not st.session_state.battle_active and not st.session_state.boss_battle_data:
+                if st.button("Summon Boss", type="primary"):
+                    with st.spinner("Summoning a formidable foe..."):
+                        battle = generate_boss_battle(vector_store, global_search, topic, 5)
+                        if battle and "questions" in battle:
+                            st.session_state.boss_battle_data = battle
+                            st.session_state.player_hp = 100
+                            st.session_state.boss_hp = 100
+                            st.session_state.current_q_index = 0
+                            st.session_state.combat_log = [f"You are challenged by {battle.get('boss_emoji', '🐉')} {battle.get('boss_name', 'The Guardian')}!"]
+                            st.session_state.battle_active = True
+                            st.rerun()
+                        else:
+                            st.error("Failed to summon boss. Try another topic.")
+            
+            if st.session_state.battle_active and st.session_state.boss_battle_data:
+                battle = st.session_state.boss_battle_data
+                st.markdown(f"<h2 style='text-align: center;'>{battle.get('boss_emoji', '🐉')} {battle.get('boss_name', 'The Guardian')}</h2>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align: center; font-style: italic;'>{battle.get('boss_description', '')}</p>", unsafe_allow_html=True)
+                
+                col_hp1, col_hp2 = st.columns(2)
+                with col_hp1:
+                    st.markdown("**Your HP**")
+                    st.progress(st.session_state.player_hp / 100.0)
+                with col_hp2:
+                    st.markdown("**Boss HP**")
+                    st.progress(st.session_state.boss_hp / 100.0)
+                    
+                st.markdown("---")
+                
+                q_index = st.session_state.current_q_index
+                questions = battle['questions']
+                
+                if q_index < len(questions):
+                    q = questions[q_index]
+                    st.markdown(f"**{q['question']}**")
+                    st.markdown(f"*{q['attack_message']}*")
+                    
+                    ans = st.radio("Select to counter-attack:", q['options'], index=None, key=f"boss_q_{q_index}")
+                    if st.button("Attack!"):
+                        if ans:
+                            if ans == q['correct_answer']:
+                                dmg = 100 // len(questions)
+                                st.session_state.boss_hp = max(0, st.session_state.boss_hp - dmg)
+                                st.session_state.combat_log.append(f"✅ Correct! You dealt {dmg} damage.")
+                                if st.session_state.boss_hp == 0:
+                                    st.session_state.battle_active = False
+                                    st.session_state.combat_log.append("🎉 You defeated the boss!")
+                            else:
+                                dmg = 25
+                                st.session_state.player_hp = max(0, st.session_state.player_hp - dmg)
+                                st.session_state.combat_log.append(f"❌ Incorrect! You took {dmg} damage. Correct answer: {q['correct_answer']}")
+                                if st.session_state.player_hp == 0:
+                                    st.session_state.battle_active = False
+                                    st.session_state.combat_log.append("💀 You were defeated by the boss. Study and try again!")
+                            
+                            st.session_state.current_q_index += 1
+                            if st.session_state.current_q_index >= len(questions) and st.session_state.boss_hp > 0 and st.session_state.player_hp > 0:
+                                st.session_state.battle_active = False
+                                if st.session_state.boss_hp < st.session_state.player_hp:
+                                    st.session_state.combat_log.append("The boss fled! You survived.")
+                                else:
+                                    st.session_state.combat_log.append("The battle ended in a stalemate.")
+                                    
+                            st.rerun()
+                        else:
+                            st.warning("Select an answer to attack!")
+                            
+                st.markdown("### Combat Log")
+                for log in reversed(st.session_state.combat_log):
+                    st.markdown(f"> {log}")
+                    
+                if not st.session_state.battle_active:
+                    st.markdown("---")
+                    if st.session_state.boss_hp == 0:
+                        st.balloons()
+                        st.success("Victory! You vanquished the notes.")
+                        if st.button("Claim Boss Loot (50 XP)", type="primary"):
+                            state = add_xp(st.session_state.user['id'], 50)
+                            st.session_state.user['xp'] = state['xp']
+                            st.session_state.user['level'] = state['level']
+                            st.toast("+50 XP! 🌟")
+                            log_study_session(st.session_state.user['id'], "boss_battle", 15)
+                            if award_badge(st.session_state.user['id'], "Dragon Slayer"):
+                                st.toast("Unlocked 'Dragon Slayer' Badge! 🏆")
+                                if "Dragon Slayer" not in st.session_state.user['badges']:
+                                     st.session_state.user['badges'].append("Dragon Slayer")
+                            
+                            st.session_state.boss_battle_data = None
+                            st.rerun()
+                    else:
+                        st.error("Defeat! Time to hit the books again.")
+                        if st.button("Retreat & Study"):
+                            st.session_state.boss_battle_data = None
+                            st.rerun()
+                            
             st.markdown('</div>', unsafe_allow_html=True)
 
 def view_materials():

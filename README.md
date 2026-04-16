@@ -39,9 +39,4 @@ An interactive, AI-powered learning workspace designed to help you organize note
      GEMINI_API_KEY=your_actual_api_key_here
      ```
 
-5. **Run the Streamlit app:**
-   ```bash
-   python -m streamlit run app.py
-   ```
-## 🔗 Live Demo
-👉 https://ai-buddy-study.streamlit.app
+
